@@ -18,6 +18,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -244,10 +246,10 @@ public class CleanerTest {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         CountDownLatch start = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(numThreads);
-        Thread[] threads = new Thread[numThreads];
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
 
         for (int i = 0; i < numThreads; i++) {
-            Thread thread = new Thread(() -> {
+            executor.execute(() -> {
                 try {
                     start.await();
                     for (int j = 0; j < numLoops; j++) {
@@ -261,12 +263,11 @@ public class CleanerTest {
                     done.countDown();
                 }
             });
-            threads[i] = thread;
-            thread.start();
         }
 
         start.countDown();
         done.await();
+        executor.shutdown();
 
         if (failure.get() != null)
             throw new AssertionError("Concurrent cleaner use failed", failure.get());

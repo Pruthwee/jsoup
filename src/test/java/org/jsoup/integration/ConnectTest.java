@@ -31,7 +31,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.Authenticator;
@@ -943,19 +942,14 @@ public class ConnectTest {
         FormElement form = forms.get(0);
         Connection post = form.submit();
 
-        File uploadFile = ParseTest.getFile("/htmltests/large.html");
-        FileInputStream stream = new FileInputStream(uploadFile);
-
-        Connection.KeyVal fileData = post.data("_file");
-        assertNotNull(fileData);
-        fileData.value("check.html");
-        fileData.inputStream(stream);
-
         Connection.Response res;
-        try {
+        try (InputStream stream = ParseTest.class.getResourceAsStream("/htmltests/large.html")) {
+            Connection.KeyVal fileData = post.data("_file");
+            assertNotNull(fileData);
+            fileData.value("check.html");
+            fileData.inputStream(stream);
+
             res = post.execute();
-        } finally {
-            stream.close();
         }
 
         Document doc = res.parse();

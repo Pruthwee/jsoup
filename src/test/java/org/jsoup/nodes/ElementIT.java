@@ -5,8 +5,12 @@ import org.jsoup.parser.Parser;
 import org.jsoup.select.Elements;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -24,13 +28,13 @@ public class ElementIT {
         }
         String html = htmlBuf.toString();
         Document doc = Jsoup.parse(html);
-        long start = System.currentTimeMillis();
+        long start = Instant.now().toEpochMilli();
 
         Element wrapper = new Element("div");
         List<Node> childNodes = doc.body().childNodes();
         wrapper.insertChildren(0, childNodes);
 
-        long runtime = System.currentTimeMillis() - start;
+        long runtime = Instant.now().toEpochMilli() - start;
         assertEquals(rows, wrapper.childNodes.size());
         assertEquals(rows, childNodes.size()); // child nodes is a wrapper, so still there
         assertEquals(0, doc.body().childNodes().size()); // but on a fresh look, all gone
@@ -55,7 +59,7 @@ public class ElementIT {
         }
         String html = htmlBuf.toString();
         Document doc = Jsoup.parse(html);
-        long start = System.currentTimeMillis();
+        long start = Instant.now().toEpochMilli();
 
         Element wrapper = new Element("div");
         wrapper.append("<p>Prior Content</p>");
@@ -65,7 +69,7 @@ public class ElementIT {
         List<Node> childNodes = doc.body().childNodes();
         wrapper.insertChildren(1, childNodes);
 
-        long runtime = System.currentTimeMillis() - start;
+        long runtime = Instant.now().toEpochMilli() - start;
         assertEquals(rows + 2, wrapper.childNodes.size());
         assertEquals(rows, childNodes.size()); // child nodes is a wrapper, so still there
         assertEquals(0, doc.body().childNodes().size()); // but on a fresh look, all gone
@@ -178,14 +182,12 @@ public class ElementIT {
         };
 
         int threadCount = 10;
-        Thread[] threads = new Thread[threadCount];
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         for (int i = 0; i < threadCount; i++) {
-            threads[i] = new Thread(mergeTask);
-            threads[i].start();
+            executor.execute(mergeTask);
         }
-        for (Thread t : threads) {
-            t.join();
-        }
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(5, TimeUnit.MINUTES));
     }
 
     @Test
@@ -204,8 +206,9 @@ public class ElementIT {
         CountDownLatch endLatch = new CountDownLatch(threadCount);
         AtomicReference<Throwable> failure = new AtomicReference<>();
 
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         for (int i = 0; i < threadCount; i++) {
-            Thread t = new Thread(() -> {
+            executor.execute(() -> {
                 try {
                     startLatch.await();
                     for (int j = 0; j < iterCount; j++) {
@@ -219,11 +222,11 @@ public class ElementIT {
                     endLatch.countDown();
                 }
             });
-            t.start();
         }
 
         startLatch.countDown();
         endLatch.await();
+        executor.shutdown();
         if (failure.get() != null) {
             throw new AssertionError(failure.get());
         }

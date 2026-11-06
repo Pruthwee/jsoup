@@ -5,10 +5,13 @@ import com.google.gson.reflect.TypeToken;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 
-import java.io.File;
-import java.io.FileWriter;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+
 import java.io.IOException;
-import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Map;
@@ -71,16 +74,26 @@ class BuildEntities {
     }
 
     private static void persist(String name, ArrayList<CharacterRef> refs) throws IOException {
-        File file = Files.createTempFile(name, ".txt").toFile();
-        FileWriter writer = new FileWriter(file, false);
-        writer.append("static final String points = \"");
+        StringBuilder out = new StringBuilder();
+        out.append("static final String points = \"");
         for (CharacterRef ref : refs) {
-            writer.append(ref.toString()).append('&');
+            out.append(ref.toString()).append('&');
         }
-        writer.append("\";\n");
-        writer.close();
+        out.append("\";\n");
 
-        System.out.println("Wrote " + name + " to " + file.getAbsolutePath());
+        String bucket = System.getenv("APP_S3_BUCKET");
+        if (bucket == null || bucket.isEmpty())
+            throw new IOException("APP_S3_BUCKET is not set");
+        String key = name + ".txt";
+        // client is built on first use, with the SDK's default region and credentials chain
+        try (S3Client s3 = S3Client.create()) {
+            s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
+                RequestBody.fromBytes(out.toString().getBytes(StandardCharsets.UTF_8)));
+        } catch (SdkException e) {
+            throw new IOException("Could not write " + key + " to S3", e);
+        }
+
+        System.out.println("Wrote " + name + " to s3://" + bucket + "/" + key);
     }
 
 

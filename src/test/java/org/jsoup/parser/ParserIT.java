@@ -4,8 +4,12 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,7 +34,7 @@ public class ParserIT {
         }
 
         // Act
-        long start = System.currentTimeMillis();
+        long start = Instant.now().toEpochMilli();
         Document doc = Parser.parseBodyFragment(longBody.toString(), "");
 
         int depth = 1;
@@ -44,7 +48,7 @@ public class ParserIT {
         assertEquals(1, doc.body().childrenSize());
         assertEquals(512, depth);
         assertEquals(25000, doc.select("dd").size());
-        assertTrue(System.currentTimeMillis() - start < 20000); // I get ~ 1.5 seconds, but others have reported slower
+        assertTrue(Instant.now().toEpochMilli() - start < 20000); // I get ~ 1.5 seconds, but others have reported slower
         // was originally much longer, or stack overflow.
     }
 
@@ -57,22 +61,19 @@ public class ParserIT {
 
         int numThreads = 10;
         int numLoops = 20;
-        List<Thread> threads = new ArrayList<>(numThreads);
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
         List<Document> toCheck = new ArrayList<>(numThreads * numLoops);
         for (int i = 0; i < numThreads; i++) {
-            Thread thread = new Thread(() -> {
+            executor.execute(() -> {
                 for (int j = 0; j < numLoops; j++) {
                     Document doc = parser.parseInput(html, "");
                     toCheck.add(doc);
                 }
             });
-            threads.add(thread);
-            thread.start();
         }
 
-        for (Thread thread : threads) {
-            thread.join();
-        }
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(5, TimeUnit.MINUTES));
 
         for (Document doc : toCheck) {
             assertTrue(doc.hasSameValue(expectDoc));
@@ -89,23 +90,20 @@ public class ParserIT {
 
         int numThreads = 10;
         int numLoops = 20;
-        List<Thread> threads = new ArrayList<>(numThreads);
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
         List<Element> toCheck = new ArrayList<>(numThreads * numLoops);
         for (int i = 0; i < numThreads; i++) {
-            Thread thread = new Thread(() -> {
+            executor.execute(() -> {
                 for (int j = 0; j < numLoops; j++) {
                     Element cloned = baseElement.clone();
                     cloned.append(append); // invokes the parser internally - parseFragment
                     toCheck.add(cloned);
                 }
             });
-            threads.add(thread);
-            thread.start();
         }
 
-        for (Thread thread : threads) {
-            thread.join();
-        }
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(5, TimeUnit.MINUTES));
 
         baseElement.append(append);
         for (Element element : toCheck) {

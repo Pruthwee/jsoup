@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 
+import java.time.Instant;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,6 +21,10 @@ import java.io.UncheckedIOException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -45,12 +50,18 @@ public class ConnectIT {
             "false"); // use the default UrlConnection. See HttpClientConnectIT for other version
     }
 
+    private static void awaitDone(ExecutorService executor) throws InterruptedException {
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(5, TimeUnit.MINUTES));
+    }
+
     // Slow Rider tests.
     @Test
     @Execution(CONCURRENT)
     public void canInterruptBodyStringRead() throws InterruptedException {
         final String[] body = new String[1];
-        Thread runner = new Thread(() -> {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<?> runner = executor.submit(() -> {
             try {
                 Connection.Response res = Jsoup.connect(origin().slowRider.url())
                     .timeout(15 * 1000)
@@ -62,11 +73,9 @@ public class ConnectIT {
 
         });
 
-        runner.start();
         Thread.sleep(1000 * 3);
-        runner.interrupt();
-        assertTrue(runner.isInterrupted());
-        runner.join();
+        assertTrue(runner.cancel(true)); // interrupts the running task
+        awaitDone(executor);
 
         assertTrue(body[0].length() > 0);
         assertTrue(body[0].contains("<p>Are you still there?"));
@@ -75,9 +84,10 @@ public class ConnectIT {
     @Test
     @Execution(CONCURRENT)
     public void canInterruptDocumentRead() throws InterruptedException {
-        long start = System.currentTimeMillis();
+        long start = Instant.now().toEpochMilli();
         final String[] body = new String[1];
-        Thread runner = new Thread(() -> {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<?> runner = executor.submit(() -> {
             try {
                 Connection.Response res = Jsoup.connect(origin().slowRider.url())
                     .timeout(15 * 1000)
@@ -89,13 +99,11 @@ public class ConnectIT {
 
         });
 
-        runner.start();
         Thread.sleep(3 * 1000);
-        runner.interrupt();
-        assertTrue(runner.isInterrupted());
-        runner.join();
+        assertTrue(runner.cancel(true)); // interrupts the running task
+        awaitDone(executor);
 
-        long end = System.currentTimeMillis();
+        long end = Instant.now().toEpochMilli();
         // check we are between 3 and connect timeout seconds (should be just over 3; but allow some slack for slow CI runners)
         assertTrue(end - start > 3 * 1000);
         assertTrue(end - start < 10 * 1000);
@@ -106,7 +114,8 @@ public class ConnectIT {
     public void canInterruptThenJoinASpawnedThread() throws InterruptedException {
         // https://github.com/jhy/jsoup/issues/1991
         AtomicBoolean ioException = new AtomicBoolean();
-        Thread runner = new Thread(() -> {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<?> runner = executor.submit(() -> {
             try {
                 while (!Thread.currentThread().isInterrupted()) {
                     Document doc = Jsoup.connect(origin().slowRider.url())
@@ -119,20 +128,19 @@ public class ConnectIT {
             }
         });
 
-        runner.start();
         Thread.sleep(2 * 1000);
-        runner.interrupt();
-        runner.join();
+        runner.cancel(true); // interrupts the running task
+        awaitDone(executor);
         assertFalse(ioException.get());
     }
 
     @Test
     @Execution(CONCURRENT)
     public void totalTimeout() throws IOException {
-        long start = System.currentTimeMillis();
+        long start = Instant.now().toEpochMilli();
         assertThrows(SocketTimeoutException.class, () -> slowRiderTimeout().timeout(TimeoutMillis).get());
 
-        long took = System.currentTimeMillis() - start;
+        long took = Instant.now().toEpochMilli() - start;
         assertTrue(took >= TimeoutMillis - 100, ("Time taken was " + took));
     }
 

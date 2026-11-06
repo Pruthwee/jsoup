@@ -14,6 +14,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.Instant;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -1825,12 +1826,12 @@ public class HtmlParserTest {
         }
 
         // Act
-        long start = System.currentTimeMillis();
+        long start = Instant.now().toEpochMilli();
         Document doc = Parser.parseBodyFragment(longBody.toString(), "");
 
         // Assert
         assertEquals(50000, doc.body().childNodeSize());
-        assertTrue(System.currentTimeMillis() - start < 1000);
+        assertTrue(Instant.now().toEpochMilli() - start < 1000);
     }
 
     @Test

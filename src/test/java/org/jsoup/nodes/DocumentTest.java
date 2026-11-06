@@ -16,6 +16,9 @@ import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -506,12 +509,13 @@ public class DocumentTest {
         final Elements p = doc.select("p");
         assertEquals(html, p.outerHtml());
 
-        Thread thread = new Thread(() -> {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
             out[0] = p.outerHtml();
             doc.outputSettings().charset(StandardCharsets.US_ASCII);
         });
-        thread.start();
-        thread.join();
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(1, TimeUnit.MINUTES));
 
         assertEquals(html, out[0]);
         assertEquals(StandardCharsets.US_ASCII, doc.outputSettings().charset());

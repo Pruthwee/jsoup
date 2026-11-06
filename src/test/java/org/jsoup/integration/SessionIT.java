@@ -11,6 +11,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.jsoup.integration.TestServer.*;
@@ -18,6 +22,24 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Integration tests to test longer running Connection */
 public class SessionIT {
+    private static final long ExecutorWaitMinutes = 5;
+
+    /** Names the pool's threads Runner-n, and reports their uncaught exceptions to the handler. */
+    private static ThreadFactory runnerThreads(Thread.UncaughtExceptionHandler handler) {
+        AtomicInteger next = new AtomicInteger();
+        return runnable -> {
+            Thread thread = Executors.defaultThreadFactory().newThread(runnable);
+            thread.setName("Runner-" + next.getAndIncrement());
+            thread.setUncaughtExceptionHandler(handler);
+            return thread;
+        };
+    }
+
+    private static void awaitDone(ExecutorService executor) throws InterruptedException {
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(ExecutorWaitMinutes, TimeUnit.MINUTES));
+    }
+
     @BeforeAll
     public static void setUp() {
         start();
@@ -43,9 +65,9 @@ public class SessionIT {
 
         Connection session = Jsoup.newSession();
 
-        Thread[] threads = new Thread[numThreads];
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads, runnerThreads(catcher));
         for (int threadNum = 0; threadNum < numThreads; threadNum++) {
-            Thread thread = new Thread(() -> {
+            executor.execute(() -> {
                 for (int loop = 0; loop < numThreadLoops; loop++) {
                     for (int i = 0; i < urls.length; i++) {
                         try {
@@ -57,16 +79,10 @@ public class SessionIT {
                     }
                 }
             });
-            thread.setName("Runner-" + threadNum);
-            thread.start();
-            thread.setUncaughtExceptionHandler(catcher);
-            threads[threadNum] = thread;
         }
 
-        // now join them all
-        for (Thread thread : threads) {
-            thread.join();
-        }
+        // now wait for them all
+        awaitDone(executor);
 
         assertEquals(0, catcher.exceptionCount.get());
     }
@@ -84,7 +100,8 @@ public class SessionIT {
 
         // run first slow request
         AtomicInteger successful = new AtomicInteger();
-        Thread slow = new Thread(() -> {
+        ExecutorService slow = Executors.newSingleThreadExecutor();
+        slow.execute(() -> {
             try {
                 Document doc = session.url(url).get();
                 assertNotNull(doc);
@@ -93,13 +110,12 @@ public class SessionIT {
                     throw new UncheckedIOException(e);
             }
         });
-        slow.start();
         Thread.sleep(100); // yield so that thread can start before the next do
 
         // spawn others, should fail
-        Thread[] threads = new Thread[numThreads];
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads, runnerThreads(catcher));
         for (int threadNum = 0; threadNum < numThreads; threadNum++) {
-            Thread thread = new Thread(() -> {
+            executor.execute(() -> {
                 try {
                     Document doc = session.url(url).get();
                     assertEquals(title, doc.title());
@@ -108,18 +124,12 @@ public class SessionIT {
                     throw new UncheckedIOException(e);
                 }
             });
-            thread.setName("Runner-" + threadNum);
-            thread.setUncaughtExceptionHandler(catcher);
-            thread.start();
-            threads[threadNum] = thread;
         }
 
-        // now join them all
-        for (Thread thread : threads) {
-            thread.join();
-        }
+        // now wait for them all
+        awaitDone(executor);
         // cancel the slow runner so we can wrap up the test quicker
-        slow.interrupt();
+        slow.shutdownNow();
 
         // only one should have passed, rest should have blown up (assuming the started whilst other was running)
         //assertEquals(numThreads - 1, catcher.multiThreadExceptions.get());
@@ -159,9 +169,9 @@ public class SessionIT {
                 }
             });
 
-        Thread[] threads = new Thread[numThreads];
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads, runnerThreads(catcher));
         for (int threadNum = 0; threadNum < numThreads; threadNum++) {
-            Thread thread = new Thread(() -> {
+            executor.execute(() -> {
                 for (String url : urls) {
                     try {
                         Connection con = session.newRequest().url(url);
@@ -171,16 +181,10 @@ public class SessionIT {
                     }
                 }
             });
-            thread.setName("Runner-" + threadNum);
-            thread.setUncaughtExceptionHandler(catcher);
-            thread.start();
-            threads[threadNum] = thread;
         }
 
-        // now join them all
-        for (Thread thread : threads) {
-            thread.join();
-        }
+        // now wait for them all
+        awaitDone(executor);
 
         assertEquals(0, catcher.exceptionCount.get());
         assertEquals(urls.length, seenUrls.size());

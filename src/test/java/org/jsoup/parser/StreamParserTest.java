@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -631,12 +630,12 @@ class StreamParserTest {
     }
 
     @Test void canParseFileReader() throws IOException {
-        File file = ParseTest.getFile("/htmltests/large.html");
+        String resourceName = "/htmltests/large.html";
 
-        // can't use FileReader from Java 11 here
-        InputStreamReader input = new InputStreamReader(Files.newInputStream(file.toPath()), StandardCharsets.UTF_8);
+        // the test page ships on the classpath; read it as a stream
+        InputStreamReader input = new InputStreamReader(ParseTest.class.getResourceAsStream(resourceName), StandardCharsets.UTF_8);
         BufferedReader reader = new BufferedReader(input);
-        StreamParser streamer = new StreamParser(Parser.htmlParser()).parse(reader, file.getAbsolutePath());
+        StreamParser streamer = new StreamParser(Parser.htmlParser()).parse(reader, resourceName);
 
         Element last = null, e;
         while ((e = streamer.selectNext("p")) != null) {

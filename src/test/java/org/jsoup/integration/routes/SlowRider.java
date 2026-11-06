@@ -3,6 +3,8 @@ package org.jsoup.integration.routes;
 import org.jsoup.integration.netty.TestRequest;
 import org.jsoup.integration.netty.TestResponse;
 
+import java.time.Instant;
+
 /**
  Slowly, interminably writes output. For the purposes of testing timeouts and interrupts.
  */
@@ -26,7 +28,7 @@ public final class SlowRider {
         int introSize = intParam(request, IntroSizeParam, 0);
         int startDelay = intParam(request, StartDelayParam, DefaultStartDelay);
         int interval = intParam(request, IntervalParam, DefaultInterval);
-        long startTime = System.currentTimeMillis();
+        long startTime = Instant.now().toEpochMilli();
 
         response.defer();
         response.schedule(startDelay, () -> startRide(response, startTime, maxTime, introSize, interval));
@@ -55,7 +57,7 @@ public final class SlowRider {
         response.schedule(interval, () -> {
             if (!response.isOpen()) return;
 
-            if (maxTime > 0 && System.currentTimeMillis() > startTime + maxTime) {
+            if (maxTime > 0 && Instant.now().toEpochMilli() > startTime + maxTime) {
                 response.writeChunk("<h1>outatime</h1>\n");
                 response.finish();
                 return;

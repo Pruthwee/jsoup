@@ -6,11 +6,8 @@ import org.jsoup.nodes.*;
 import org.jsoup.select.Elements;
 import org.junit.jupiter.api.Test;
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -63,9 +60,8 @@ public class XmlTreeBuilderTest {
     }
 
     @Test
-    public void testSupplyParserToDataStream() throws IOException, URISyntaxException {
-        File xmlFile = new File(XmlTreeBuilder.class.getResource("/htmltests/xml-test.xml").toURI());
-        InputStream inStream = new FileInputStream(xmlFile);
+    public void testSupplyParserToDataStream() throws IOException {
+        InputStream inStream = XmlTreeBuilder.class.getResourceAsStream("/htmltests/xml-test.xml");
         Document doc = Jsoup.parse(inStream, null, "http://foo.com", Parser.xmlParser());
         assertEquals("<doc><val>One<val>Two</val>Three</val></doc>",
                 TextUtil.stripNewlines(doc.html()));
@@ -112,9 +108,8 @@ public class XmlTreeBuilderTest {
     }
 
     @Test
-    public void testDetectCharsetEncodingDeclaration() throws IOException, URISyntaxException {
-        File xmlFile = new File(XmlTreeBuilder.class.getResource("/htmltests/xml-charset.xml").toURI());
-        InputStream inStream = new FileInputStream(xmlFile);
+    public void testDetectCharsetEncodingDeclaration() throws IOException {
+        InputStream inStream = XmlTreeBuilder.class.getResourceAsStream("/htmltests/xml-charset.xml");
         Document doc = Jsoup.parse(inStream, null, "http://example.com/", Parser.xmlParser());
         assertEquals("ISO-8859-1", doc.charset().name());
         assertEquals("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><data>äöåéü</data>",

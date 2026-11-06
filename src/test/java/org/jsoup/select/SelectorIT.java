@@ -6,9 +6,14 @@ import org.jsoup.parser.Parser;
 import org.jsoup.parser.StreamParser;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 public class SelectorIT {
@@ -23,9 +28,16 @@ public class SelectorIT {
 
         SelectorIT.ThreadCatcher catcher = new SelectorIT.ThreadCatcher();
 
-        Thread[] threads = new Thread[numThreads];
+        AtomicInteger nextRunner = new AtomicInteger();
+        ThreadFactory runnerThreads = runnable -> {
+            Thread thread = Executors.defaultThreadFactory().newThread(runnable);
+            thread.setName("Runner-" + nextRunner.getAndIncrement());
+            thread.setUncaughtExceptionHandler(catcher);
+            return thread;
+        };
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads, runnerThreads);
         for (int threadNum = 0; threadNum < numThreads; threadNum++) {
-            Thread thread = new Thread(() -> {
+            executor.execute(() -> {
                 Document doc = Jsoup.parse(html);
                 for (int loop = 0; loop < numThreadLoops; loop++) {
                     Elements els = doc.select(eval);
@@ -33,16 +45,11 @@ public class SelectorIT {
                     assertEquals("2", els.get(0).id());
                 }
             });
-            thread.setName("Runner-" + threadNum);
-            thread.start();
-            thread.setUncaughtExceptionHandler(catcher);
-            threads[threadNum] = thread;
         }
 
-        // now join them all
-        for (Thread thread : threads) {
-            thread.join();
-        }
+        // now wait for them all
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(5, TimeUnit.MINUTES));
 
         assertEquals(0, catcher.exceptionCount.get());
     }
